@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Golden Goose APEX — Flask</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+      async function fetchBalances() {
+        const refresh = document.getElementById('refresh').value;
+        const baseUrl = document.getElementById('base_url').value;
+        const serverTime = document.getElementById('server_time').checked ? '1' : '0';
+        const statusEl = document.getElementById('status');
+        const grid = document.getElementById('grid');
+        const err = document.getElementById('error');
+        try {
+          statusEl.textContent = 'Loading...';
+          err.textContent = '';
+          const res = await fetch(`/api/balances?base_url=${encodeURIComponent(baseUrl)}&server_time=${serverTime}`);
+          const data = await res.json();
+          statusEl.textContent = '';
+          grid.innerHTML = '';
+          if (!data.ok) {
+            err.textContent = 'Error: ' + (data.error ?? 'Unknown error');
+            return;
+          }
+          const entries = Object.entries(data.balances || {}).sort((a,b)=>a[0].localeCompare(b[0]));
+          if (entries.length === 0) {
+            grid.innerHTML = '<div class="card muted">Connected, but no non-zero balances.</div>';
+            return;
+          }
+          for (const [asset, amount] of entries) {
+            const pretty = amount < 1 ? amount.toFixed(8) : amount.toFixed(4);
+            const el = document.createElement('div');
+            el.className = 'card';
+            el.innerHTML = `<div class="asset">${asset}</div><div class="value">${pretty}</div>`;
+            grid.appendChild(el);
+          }
+        } catch (e) {
+          statusEl.textContent = '';
+          err.textContent = 'Error: ' + e;
+        }
+      }
+
+      function autoRefreshLoop() {
+        const refresh = parseInt(document.getElementById('refresh').value, 10);
+        setTimeout(async () => {
+          await fetchBalances();
+          autoRefreshLoop();
+        }, Math.max(5, refresh) * 1000);
+      }
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        await fetchBalances();
+        autoRefreshLoop();
+      });
+    </script>
+  </head>
+  <body>
+    <header>
+      <h1>🪿 Golden Goose APEX — Live Wallet (Flask)</h1>
+      <p class="subtitle">Every balance tells a story. Let's make sure it's a good one.</p>
+    </header>
+
+    <section class="controls">
+      <label>Auto-refresh (seconds):
+        <input id="refresh" type="number" min="5" max="300" value="{{ refresh|int }}">
+      </label>
+      <label>Binance Endpoint:
+        <select id="base_url">
+          <option value="https://api.binance.us" {% if base_url=="https://api.binance.us" %}selected{% endif %}>https://api.binance.us</option>
+        </select>
+      </label>
+      <label class="checkbox">
+        <input id="server_time" type="checkbox" {% if use_server_time %}checked{% endif %}>
+        Use server time sync (avoid -1021)
+      </label>
+      <button onclick="fetchBalances()">Refresh now</button>
+      <div id="status"></div>
+    </section>
+
+    <section id="grid" class="grid"></section>
+    <section id="error" class="error"></section>
+
+    <footer>
+      <p class="tiny">Tip: use read-only keys + IP whitelist. Never commit secrets.</p>
+    </footer>
+  </body>
+</html>
